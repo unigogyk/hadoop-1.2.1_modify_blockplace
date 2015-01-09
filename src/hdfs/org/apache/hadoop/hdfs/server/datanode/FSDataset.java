@@ -639,11 +639,48 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
     
   static class FSVolumeSet {
     FSVolume[] volumes = null;
+    
+    /*unigo*/
+    //record number of all kinds of devices
+    int[] volNums = null;
+    //record offset of all kinds of device
+    int[] offset = null;
+    //record base address of offset
+    int[] base = null;
+    
+    /**
     int curVolume = 0;
       
     FSVolumeSet(FSVolume[] volumes) {
       this.volumes = volumes;
     }
+    */
+    
+    FSVolumeSet(FSVolume[] volumes, int[] volNums) {
+        this.volumes = volumes;
+        this.volNums = volNums;
+        System.out.println("=======================>");
+        System.out.println("FSDataset.volNums");
+        for(int t : volNums)
+        	System.out.println(t);
+        System.out.println("=======================>");
+        this.offset = new int[volNums.length];
+        for(int t = 0; t < offset.length; t++){
+        	offset[t] = 0;	//init offset
+        	System.out.println("offset : " + offset[t]);
+        }	
+        //init base address
+        this.base = new int[volNums.length];
+        base[0] = 0;
+        System.out.println("=======================>");
+        System.out.println("FSDataset.base");
+        for(int i = 1; i < volNums.length; i++){
+        	base[i] = base[i-1] + volNums[i-1];	
+        	System.out.println(base[i]);
+        }
+        	
+      }
+    /*end*/
     
     private int numberOfVolumes() {
       return volumes.length;
@@ -660,11 +697,19 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
       
       // since volumes could've been removed because of the failure
       // make sure we are not out of bounds
+      /*unigo*/
+      /**
       if(curVolume >= volumes.length) {
         curVolume = 0;
       }
+      */
+      for(int i = 0; i < offset.length; i++){
+    	  if(offset[i] >= volNums[i])	//offset > number of device
+    		  offset[i] = 0;
+      }
+      /*end*/
       
-      int startVolume = curVolume;
+      //int startVolume = curVolume;
      /*panfengfeng modify*/
      /*
       while (true) {
@@ -680,12 +725,14 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
         }
       }
      */
+      
+     /** 
      while (true) {
 	FSVolume volume = volumes[curVolume];
 	curVolume = (curVolume + 1) % volumes.length;
 	if (volume.getAvailable() > blockSize) {
 		if( isFirstdn ) {
-			/*judege the dir  "/mnt/datadir3/dfs/data"*/
+			//judege the dir  "/mnt/datadir3/dfs/data"
 			if( "/mnt/datadir3/dfs/data".equals(volume.getDir().getParent()) ) {
 				return volume;
 			}
@@ -699,7 +746,38 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
           throw new DiskOutOfSpaceException("Insufficient space for an additional block");
         }
      }
+     */
      /*panfengfeng end*/
+      
+      /*unigo*/
+      FSVolume volume = null;
+      if(isFirstdn){
+    	  for(int i = 0; i < volNums.length; i++){
+        	  for(int j = 0; j < volNums[i]; j++){
+        		  volume = volumes[base[i] + offset[i]];
+        		  offset[i] = (offset[i] + 1) % volNums[i];
+        		  if(volume.getAvailable() > blockSize){
+        			  return volume;
+        		  }
+        	  }
+          }
+      } else {
+    	  for(int i = volNums.length-1; i >= 0; i--){
+    		  for(int j = 0; j < volNums[i]; j++){
+    			  volume = volumes[base[i] + offset[i]];
+    			  offset[i] = (offset[i] + 1) % volNums[i];
+    			  if(volume.getAvailable() > blockSize){
+        			  return volume;
+        		  }
+    		  }
+    	  }
+      }
+      
+      if(volume.getAvailable() < blockSize)
+    	  throw new DiskOutOfSpaceException("Insufficient space for an additional block");
+      
+      return null;
+      /*end*/
     }
       
     long getDfsUsed() throws IOException {
@@ -990,13 +1068,20 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
       conf.getInt("dfs.datanode.failed.volumes.tolerated",
                   0);
     
-    String[] dataDirs = conf.getStrings(DataNode.DATA_DIR_KEY);
-    
+    /*unigo*/
+    String[] dataDirs0 = conf.getStrings(DataNode.DATA_DIR_KEY);
+    System.out.println("dfs.data.dir : " + dataDirs0.length);
+    String[] dataDirs1 = conf.getStrings("dfs.data.dir1");
+    System.out.println("dfs.data.dir1 : " + dataDirs1.length);
+    /*end*/
     int volsConfigured=0;
     
-    if(dataDirs != null)
-       volsConfigured = dataDirs.length;
+    /*unigo*/
+    if((dataDirs0 != null)&&(dataDirs1 != null))
+       volsConfigured = dataDirs0.length + dataDirs1.length;
+    /*end*/
     
+    //number of configuration dir - number of available dir
     int volsFailed =  volsConfigured - storage.getNumStorageDirs();
     
     if( volsFailed < 0 ||
@@ -1017,7 +1102,9 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
     for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
       volArray[idx] = new FSVolume(storage.getStorageDir(idx).getCurrentDir(), conf);
     }
-    volumes = new FSVolumeSet(volArray);
+    /*unigo*/
+    volumes = new FSVolumeSet(volArray, DataNode.volNums);
+    /*end*/
     volumes.getVolumeMap(volumeMap);
     asyncBlockReport = new AsyncBlockReport(this);
     asyncBlockReport.start();

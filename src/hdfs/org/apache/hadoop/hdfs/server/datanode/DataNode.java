@@ -109,6 +109,7 @@ import org.apache.hadoop.http.HttpServer;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.ReadaheadPool;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.VLongWritable;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.Server;
@@ -268,6 +269,10 @@ public class DataNode extends Configured
   private static final Random R = new Random();
   
   public static final String DATA_DIR_KEY = "dfs.data.dir";
+  /*unigo*/
+  //record number of all kinds of devices
+  public static int[] volNums = new int[2];
+  /*end*/
   public final static String DATA_DIR_PERMISSION_KEY = 
     "dfs.datanode.data.dir.perm";
   private static final String DEFAULT_DATA_DIR_PERMISSION = "755";
@@ -1651,9 +1656,23 @@ public class DataNode extends Configured
           " anymore. RackID resolution is handled by the NameNode.");
       System.exit(-1);
     }
-    String[] dataDirs = conf.getStrings(DATA_DIR_KEY);
+ 
+    /*unigo*/
+    String[] dataDirs0 = conf.getStrings(DATA_DIR_KEY);
+    volNums[0] = dataDirs0.length;
+    
+    String[] dataDirs1 = conf.getStrings("dfs.data.dir1");
+    volNums[1] = dataDirs1.length;
+    
+    String[] dataDirs = new String[volNums[0] + volNums[1]];
+    System.arraycopy(dataDirs0, 0, dataDirs, 0, volNums[0]);
+    System.arraycopy(dataDirs1, 0, dataDirs, volNums[0], volNums[1]);
+    /*end*/
     dnThreadName = "DataNode: [" +
                         StringUtils.arrayToString(dataDirs) + "]";
+    System.out.println("=======================>");
+    System.out.println("DataNode.dnThreadName : " + dnThreadName);
+    System.out.println("=======================>");
     DefaultMetricsSystem.initialize("DataNode");
     return makeInstance(dataDirs, conf, resources);
   }
